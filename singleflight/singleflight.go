@@ -16,6 +16,9 @@ limitations under the License.
 
 // Package singleflight provides a duplicate function call suppression
 // mechanism.
+
+// 单航班
+// 用于重复函数多次调用的机制
 package singleflight
 
 import "sync"

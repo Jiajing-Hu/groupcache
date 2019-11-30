@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package consistenthash provides an implementation of a ring hash.
+// 一致性哈希的实现
 package consistenthash
 
 import (
@@ -26,56 +26,61 @@ import (
 type Hash func(data []byte) uint32
 
 type Map struct {
-	hash     Hash
-	replicas int
-	keys     []int // Sorted
-	hashMap  map[int]string
+	hash     Hash           // 哈希算法
+	replicas int            // 副本数量，其中副本即为虚拟节点
+	keys     []int          // key，即为服务器的得到的hash key值，scice为升序排列。
+	hashMap  map[int]string // 哈希表，即缓存服务器到key的一个映射
 }
 
+// 本函数用于新生成一个一致性哈希map
 func New(replicas int, fn Hash) *Map {
 	m := &Map{
 		replicas: replicas,
-		hash:     fn,
+		hash:     fn, // 哈希函数可以自己制定
 		hashMap:  make(map[int]string),
 	}
 	if m.hash == nil {
-		m.hash = crc32.ChecksumIEEE
+		m.hash = crc32.ChecksumIEEE // 如果输入没有哈希函数的话，则可使用默认哈希函数
 	}
 	return m
 }
 
-// Returns true if there are no items available.
+// 判断是否为空
 func (m *Map) IsEmpty() bool {
 	return len(m.keys) == 0
 }
 
-// Adds some keys to the hash.
+// 对一致性哈希环中新增节点
 func (m *Map) Add(keys ...string) {
 	for _, key := range keys {
 		for i := 0; i < m.replicas; i++ {
+			// 对其本身，以及副本使用编号+key的方式计算出其hash值
 			hash := int(m.hash([]byte(strconv.Itoa(i) + key)))
-			m.keys = append(m.keys, hash)
-			m.hashMap[hash] = key
+			m.keys = append(m.keys, hash) // 将计算出来的hash增加至keys的slice中
+			m.hashMap[hash] = key         // 增加hash <-> key的一个映射
 		}
 	}
-	sort.Ints(m.keys)
+	sort.Ints(m.keys) // 重新排列
 }
 
-// Gets the closest item in the hash to the provided key.
+// 从哈希环中找到最合适的一个缓存节点
 func (m *Map) Get(key string) string {
+	// 首先判断是否为空，如果为空则返回空
 	if m.IsEmpty() {
 		return ""
 	}
 
+	// 使用同一哈希算法计算出key的对应哈希值
 	hash := int(m.hash([]byte(key)))
 
-	// Binary search for appropriate replica.
+	// 使用二分查找找到最合适的节点
 	idx := sort.Search(len(m.keys), func(i int) bool { return m.keys[i] >= hash })
 
-	// Means we have cycled back to the first replica.
+	// 如果没有找到，即到达了环末尾，则返回首节点即可
 	if idx == len(m.keys) {
 		idx = 0
 	}
 
+	// 返回对应的节点名称
 	return m.hashMap[m.keys[idx]]
 }
